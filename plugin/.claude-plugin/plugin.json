@@ -1,0 +1,8 @@
+{
+  "name": "nature-writing-plugin",
+  "description": "Nature-style academic writing skills for Chinese researchers",
+  "version": "1.0.0",
+  "skills": [
+    "./skills/"
+  ]
+}

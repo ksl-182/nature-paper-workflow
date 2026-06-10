@@ -1,0 +1,29 @@
+name: nature-figure
+version: 1.0.0
+description: Scientific figure creation with matplotlib
+
+backend:
+  axis: backend
+  allowed_values:
+    - python
+    - r
+  default: python
+  mapping:
+    python: static/fragments/backend/python.md
+    r: static/fragments/backend/r.md
+
+always_load:
+  - static/core/contract.md
+  - static/core/stance.md
+
+references:
+  on_demand:
+    - name: api
+      path: references/api.md
+      when: Need Python palette helpers
+    - name: design-theory
+      path: references/design-theory.md
+      when: Need color/typography rationale
+    - name: chart-types
+      path: references/chart-types.md
+      when: Need chart type selection help
