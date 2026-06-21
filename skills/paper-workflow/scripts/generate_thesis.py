@@ -105,8 +105,41 @@ def add_page_number_field(paragraph, fmt='decimal'):
         set_font(r, '宋体', 'Times New Roman', Pt(9))  # 六号字 ≈ 7.5pt
 
 
+def setup_toc_styles(doc):
+    """设置目录样式：一级黑体加粗，二三级宋体缩进"""
+    from docx.styles.style import ParagraphStyle
+    from docx.oxml.ns import qn as qn2
+
+    # 目录样式配置
+    toc_configs = [
+        ('TOC 1', '黑体', True, Cm(0)),      # 一级：黑体加粗，无缩进
+        ('TOC 2', '宋体', False, Cm(0)),      # 二级：宋体，无缩进
+        ('TOC 3', '宋体', False, Cm(0)),      # 三级：宋体，无缩进
+    ]
+
+    for style_name, cn_font, bold, indent in toc_configs:
+        # 检查样式是否存在，不存在则创建
+        try:
+            style = doc.styles[style_name]
+        except KeyError:
+            # 创建新样式
+            style = doc.styles.add_style(style_name, 1)  # 1 = WD_STYLE_TYPE.PARAGRAPH
+
+        style.font.name = 'Times New Roman'
+        style.font.size = Pt(12)
+        style.font.bold = bold
+        style.element.rPr.rFonts.set(qn('w:eastAsia'), cn_font)
+        style.paragraph_format.left_indent = indent
+        style.paragraph_format.space_before = Pt(0)
+        style.paragraph_format.space_after = Pt(0)
+        style.paragraph_format.line_spacing = 1.5
+
+
 def add_toc(doc):
     """插入目录域"""
+    # 设置目录样式
+    setup_toc_styles(doc)
+
     # 目录标题
     p = add_paragraph_with_font(doc, '目  录', '黑体', 'Times New Roman',
                                  Pt(16), bold=True, align='center')
@@ -164,6 +197,8 @@ def add_paragraph_with_font(doc, text, font_cn='宋体', font_en='Times New Roma
         p.alignment = WD_ALIGN_PARAGRAPH.CENTER
     elif align == 'left':
         p.alignment = WD_ALIGN_PARAGRAPH.LEFT
+    elif align == 'justify':
+        p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
 
     # 首行缩进
     if indent_first:
@@ -235,18 +270,26 @@ def add_cover_page(doc, title, college, major, student_id, name, advisor, date):
     doc.add_page_break()
 
 
-def add_abstract_cn(doc, abstract, keywords):
+def add_abstract_cn(doc, title_cn, abstract, keywords):
     """添加中文摘要"""
-    p = add_paragraph_with_font(doc, '摘  要', '黑体', 'Times New Roman',
-                                 Pt(12), bold=True, align='center')
+    # 论文中文题目：三号、黑体、加粗、居中
+    p = add_paragraph_with_font(doc, title_cn, '黑体', 'Times New Roman',
+                                 Pt(16), bold=True, align='center')
     doc.add_paragraph()
 
-    # 摘要内容
-    p = add_paragraph_with_font(doc, abstract, '宋体', 'Times New Roman',
-                                 Pt(12), indent_first=Cm(0.74), line_spacing=1.5)
+    # "摘要"标签：黑体、小四、加粗、左对齐
+    p = add_paragraph_with_font(doc, '摘  要', '黑体', 'Times New Roman',
+                                 Pt(12), bold=True, align='left')
+    doc.add_paragraph()
 
-    # 关键词
+    # 摘要内容：宋体、小四
+    p = add_paragraph_with_font(doc, abstract, '宋体', 'Times New Roman',
+                                 Pt(12), indent_first=Cm(0.74), line_spacing=1.5,
+                                 align='justify')
+
+    # 关键词标签：黑体、小四、加粗、左对齐
     p = doc.add_paragraph()
+    p.alignment = WD_ALIGN_PARAGRAPH.LEFT
     p.paragraph_format.line_spacing = 1.5
     run = p.add_run('关键词：')
     set_font(run, '黑体', 'Times New Roman', Pt(12), bold=True)
@@ -268,10 +311,12 @@ def add_abstract_en(doc, title_en, abstract_en, keywords_en):
 
     # 摘要内容
     p = add_paragraph_with_font(doc, abstract_en, 'Times New Roman', 'Times New Roman',
-                                 Pt(12), indent_first=Cm(0.74), line_spacing=1.5)
+                                 Pt(12), indent_first=Cm(0.74), line_spacing=1.5,
+                                 align='justify')
 
-    # 关键词
+    # 关键词标签：小四、TNR、加粗、左对齐
     p = doc.add_paragraph()
+    p.alignment = WD_ALIGN_PARAGRAPH.LEFT
     p.paragraph_format.line_spacing = 1.5
     run = p.add_run('Key words: ')
     set_font(run, 'Times New Roman', 'Times New Roman', Pt(12), bold=True)
@@ -281,6 +326,14 @@ def add_abstract_en(doc, title_en, abstract_en, keywords_en):
     doc.add_page_break()
 
 
+def set_outline_level(p, level):
+    """设置段落大纲级别（用于目录生成）"""
+    pPr = p._element.get_or_add_pPr()
+    outlineLvl = OxmlElement('w:outlineLvl')
+    outlineLvl.set(qn('w:val'), str(level - 1))  # 0=一级, 1=二级, 2=三级
+    pPr.append(outlineLvl)
+
+
 def add_heading_1(doc, text):
     """一级标题：四号黑体加粗左对齐"""
     p = doc.add_heading(text, level=1)
@@ -288,6 +341,7 @@ def add_heading_1(doc, text):
     p.paragraph_format.line_spacing = 1.5
     p.paragraph_format.space_before = Pt(12)
     p.paragraph_format.space_after = Pt(6)
+    set_outline_level(p, 1)
     for run in p.runs:
         set_font(run, '黑体', 'Times New Roman', Pt(14), bold=True)
     return p
@@ -300,24 +354,28 @@ def add_heading_2(doc, text):
     p.paragraph_format.line_spacing = 1.5
     p.paragraph_format.space_before = Pt(6)
     p.paragraph_format.space_after = Pt(3)
+    set_outline_level(p, 2)
     for run in p.runs:
         set_font(run, '黑体', 'Times New Roman', Pt(12), bold=True)
     return p
 
 
 def add_heading_3(doc, text):
-    """三级标题：小四宋体加粗左对齐"""
+    """三级标题：小四宋体加粗左对齐，首行缩进2字符"""
     p = doc.add_heading(text, level=3)
     p.alignment = WD_ALIGN_PARAGRAPH.LEFT
     p.paragraph_format.line_spacing = 1.5
+    p.paragraph_format.first_line_indent = Cm(0.74)  # 2字符 ≈ 0.74cm
+    set_outline_level(p, 3)
     for run in p.runs:
         set_font(run, '宋体', 'Times New Roman', Pt(12), bold=True)
     return p
 
 
 def add_body(doc, text):
-    """正文：小四宋体，1.5倍行距，首行缩进2字符"""
+    """正文：小四宋体，1.5倍行距，首行缩进2字符，两端对齐"""
     p = doc.add_paragraph()
+    p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
     p.paragraph_format.line_spacing = 1.5
     p.paragraph_format.first_line_indent = Cm(0.74)  # 2字符 ≈ 0.74cm
 
@@ -462,7 +520,8 @@ def add_acknowledgement(doc, text):
     doc.add_paragraph()
 
     p = add_paragraph_with_font(doc, text, '宋体', 'Times New Roman',
-                                 Pt(12), indent_first=Cm(0.74), line_spacing=1.5)
+                                 Pt(12), indent_first=Cm(0.74), line_spacing=1.5,
+                                 align='justify')
 
     doc.add_page_break()
 
@@ -698,7 +757,7 @@ def generate_from_json(content_file, output_file=None):
 
     # 中文摘要
     cn = content['abstract_cn']
-    add_abstract_cn(doc, abstract=cn['content'], keywords=cn['keywords'])
+    add_abstract_cn(doc, title_cn=cover['title'], abstract=cn['content'], keywords=cn['keywords'])
 
     # 英文摘要
     en = content['abstract_en']
@@ -821,7 +880,7 @@ def generate_from_md(content_file, output_file=None):
                 keywords = line.replace('**关键词：**', '').replace('**关键词:**', '').strip()
             else:
                 abstract_text.append(line)
-        add_abstract_cn(doc, abstract='\n'.join(abstract_text), keywords=keywords)
+        add_abstract_cn(doc, title_cn=meta.get('title', ''), abstract='\n'.join(abstract_text), keywords=keywords)
 
     # 英文摘要
     if abstract_en_section:
